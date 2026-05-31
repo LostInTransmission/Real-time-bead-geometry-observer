@@ -9,7 +9,7 @@ class BeadGeometryObserver:
 
     def process_layer(self, layer_index, scan_profiles, current_z_shift):
         if not scan_profiles:
-            return 0.0
+            return 0.0, []
 
         t_start = scan_profiles[0][2]
         valid_scans = []
@@ -22,10 +22,10 @@ class BeadGeometryObserver:
             valid_scans.append((px, pz, y_calc))
 
         if not valid_scans:
-            return 0.0
+            return 0.0, []
 
         if layer_index == 0:
-            return self._build_substrate_model(valid_scans)
+            return self._build_substrate_model(valid_scans), []
         else:
             return self._extract_layer_height(valid_scans, current_z_shift)
 
@@ -49,7 +49,7 @@ class BeadGeometryObserver:
 
     def _extract_layer_height(self, valid_scans, current_z_shift):
         if self.substrate_model is None:
-            return 0.0
+            return 0.0, []
             
         all_x, all_y, all_h, all_sg = [], [], [], []
 
@@ -79,7 +79,7 @@ class BeadGeometryObserver:
             all_h.extend(h_local)
             all_sg.extend(np.full(len(rx_f), sg_idx))
 
-        if not all_x: return 0.0
+        if not all_x: return 0.0, []
 
         arr_x = np.array(all_x)
         arr_y = np.array(all_y)
@@ -100,15 +100,17 @@ class BeadGeometryObserver:
         mask_dbscan = np.isin(db.labels_, valid_clusters)
 
         valid_x = arr_x[mask_dbscan]
+        valid_y = arr_y[mask_dbscan]
         valid_h = arr_h[mask_dbscan]
         valid_sg = arr_sg[mask_dbscan]
 
-        if len(valid_x) == 0: return 0.0
+        if len(valid_x) == 0: return 0.0, []
 
         temp_apexes = []
         for sg in np.unique(valid_sg):
             mask = valid_sg == sg
             xg = valid_x[mask]
+            yg = valid_y[mask]
             hg = valid_h[mask]
 
             if len(xg) < self.p['MIN_PTS']: continue
@@ -129,19 +131,21 @@ class BeadGeometryObserver:
 
                 if a >= -self.p['MIN_CURV']: continue
 
-                temp_apexes.append({'x': vx, 'z': vz})
+                vy = yg.mean()
+                temp_apexes.append({'X': vx, 'Y': vy, 'Z': vz})
             except:
                 continue
 
-        if not temp_apexes: return 0.0
+        if not temp_apexes: return 0.0, []
 
-        apex_x = np.array([ap['x'] for ap in temp_apexes])
-        apex_z = np.array([ap['z'] for ap in temp_apexes])
+        apex_x = np.array([ap['X'] for ap in temp_apexes])
+        apex_z = np.array([ap['Z'] for ap in temp_apexes])
 
         med_apex_x = np.median(apex_x)
         mask_apex_tol = (apex_x >= med_apex_x - self.p['APEX_TOL']) & (apex_x <= med_apex_x + self.p['APEX_TOL'])
         final_apex_z = apex_z[mask_apex_tol]
+        final_apexes_list = [ap for i, ap in enumerate(temp_apexes) if mask_apex_tol[i]]
 
-        if len(final_apex_z) == 0: return 0.0
+        if len(final_apex_z) == 0: return 0.0, []
 
-        return float(np.median(final_apex_z))
+        return float(np.median(final_apex_z)), final_apexes_list
