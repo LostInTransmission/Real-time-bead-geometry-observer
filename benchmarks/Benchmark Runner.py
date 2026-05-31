@@ -4,9 +4,13 @@ import pandas as pd
 import numpy as np
 from calculate_metrics import calculate_spikes, calculate_dft_noise, calculate_lag1
 
-def run_benchmark(filepath):
+def run_benchmark(filepath, target_layer=1):
     if not os.path.exists(filepath):
         print(f"File is not found: {filepath}")
+        return
+
+    if target_layer == 0:
+        print("Error: Layer 0 represents the substrate and cannot be benchmarked. Please select a layer > 0.")
         return
 
     df = pd.read_csv(filepath)
@@ -14,6 +18,12 @@ def run_benchmark(filepath):
     if 'Y' not in df.columns or 'Z' not in df.columns:
         print("Error: CSV need to include 'Y' & 'Z' with calculated apexes.")
         return
+
+    if 'Layer' in df.columns:
+        df = df[df['Layer'] == target_layer]
+        if df.empty:
+            print(f"Error: Layer {target_layer} not found in the dataset.")
+            return
 
     df_sorted = df.sort_values('Y')
     y = df_sorted['Y'].values.astype(np.float64)
@@ -28,7 +38,7 @@ def run_benchmark(filepath):
     end_time = time.perf_counter()
     calc_time_ms = (end_time - start_time) * 1000.0
 
-    print(f"--- Benchmarking Results for {filepath} ---")
+    print(f"--- Benchmarking Results for {filepath} (Layer {target_layer}) ---")
     print(f"Spikes count:     {spikes}")
     print(f"DFT noise (%):    {dft_noise:.2f}")
     print(f"Lag-1 (r1):       {lag1:.3f}")
@@ -37,4 +47,4 @@ def run_benchmark(filepath):
 
 if __name__ == "__main__":
     file_path = "../data/single_layer_representative.csv"
-    run_benchmark(file_path)
+    run_benchmark(file_path, target_layer=1)
